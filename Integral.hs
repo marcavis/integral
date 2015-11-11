@@ -1,6 +1,9 @@
 {-# LANGUAGE DeriveDataTypeable, StandaloneDeriving #-}
+
 import Data.Typeable
 import Data.Data
+
+
 
 a = Frac 2 5
 b = Frac 3 4
@@ -9,8 +12,8 @@ c = Frac (-2) 3
 d = Mono 1 x 1
 e = Mono 1 x 2
 f = Mono (-2) x 3
-fcos = Cos x 1
-fsin = Sin x 1
+fcos = Cos 1 x 1
+fsin = Sin 1 x 1
 flippy = derive (Mult fsin fsin)
 dfcos2 = derive (Mult fcos fcos)
 ff = Mono 3 x (Frac 1 3)
@@ -45,7 +48,7 @@ instance Num Fraction where
 	abs (Frac a b)				= 	Frac (abs a) (abs b)
 	fromInteger x				= 	Frac x 1
 	signum (Frac 0 b)			= 	0
-	signum (Frac a b)			=	if signum a == signum b then 1  else (-1) 
+	signum (Frac a b)			=	if signum a == signum b then 1  else (-1)
 
 instance Fractional Fraction where
 	(/) f g						=	f * (recip g)
@@ -135,14 +138,14 @@ instance Eq Monomial where
 	Sum a b == Mono 0 x n 		= a == 0 && b == 0
 	Sum a b == Sum c d 			= (a == c && b == d) || (a == d && b == c)
 	Mult a b == Mult c d		= (a == c && b == d) || (a == d && b == c)
-	Exp x == Exp y				= x == y
-	Ln x n == Ln y o 			= x == y && n == o
-	Sin x n == Sin y o 			= x == y && n == o
-	Cos x n == Cos y o 			= x == y && n == o
-	Tan x n == Tan y o 			= x == y && n == o
-	Sec x n == Sec y o 			= x == y && n == o
-	Csc x n == Csc y o 			= x == y && n == o
-	Cot x n == Cot y o 			= x == y && n == o
+	Exp a x == Exp b y			= a == b && x == y
+	Ln a x n == Ln b y o 		= a == b && x == y && n == o
+	Sin a x n == Sin b y o		= a == b && x == y && n == o
+	Cos a x n == Cos b y o		= a == b && x == y && n == o
+	Tan a x n == Tan b y o		= a == b && x == y && n == o
+	Sec a x n == Sec b y o		= a == b && x == y && n == o
+	Csc a x n == Csc b y o		= a == b && x == y && n == o
+	Cot a x n == Cot b y o		= a == b && x == y && n == o
 	Var x == Var y 				= x == y
 	_ == _						= False
 
@@ -159,14 +162,14 @@ instance Show Monomial where
 		sign' "1" = "+"
 		sign' _ = ""
 		sign''  = (show . sign . head) xs
-	show (Exp x)	= "e^(" ++ show x ++ ")"
-	show (Ln x n) 	= showFunc "ln" x n
-	show (Cos x n) 	= showFunc "cos" x n
-	show (Sin x n) 	= showFunc "sin" x n
-	show (Tan x n) 	= showFunc "tan" x n
-	show (Sec x n) 	= showFunc "sec" x n
-	show (Csc x n) 	= showFunc "csc" x n
-	show (Cot x n) 	= showFunc "cot" x n
+	show (Exp a x)	= show' a ++ "e^(" ++ show x ++ ")"
+	show (Ln a x n) 	= showFunc "ln" a x n
+	show (Cos a x n) 	= showFunc "cos" a x n
+	show (Sin a x n) 	= showFunc "sin" a x n
+	show (Tan a x n) 	= showFunc "tan" a x n
+	show (Sec a x n) 	= showFunc "sec" a x n
+	show (Csc a x n) 	= showFunc "csc" a x n
+	show (Cot a x n) 	= showFunc "cot" a x n
 
 readF :: [Char] -> Monomial -> Fraction -> Monomial
 readF "Ln" = Ln
@@ -178,7 +181,7 @@ readF "Csc" = Csc
 readF "Cot" = Cot
 
 showFunc :: String -> Monomial -> Fraction -> String
-showFunc name x n = name ++ showPow n ++ "(" ++ show x ++ ")" 
+showFunc name a x n = show' a ++ name ++ showPow n ++ "(" ++ show x ++ ")"
 show' :: Fraction -> String
 show' a = case a of
 	(-1) -> "-"
@@ -198,6 +201,7 @@ derive :: Monomial -> Monomial
 derive (Var x) 				= Mono 1 (Var x) 0
 derive (Mono a x 0) 		= Mono 0 x 0
 derive (Mono a (Var x) n) 	= Mono (a*n) (Var x) (n-1)
+{--
 derive (Mono a (Ln x 1) 1)	= (Mono a x (-1)) * (derive x) --not quite
 derive (Mono a (Cos x 1) 1)	= (Mono (-a) (Sin x 1) 1) * (derive x)
 derive (Mono a (Sin x 1) 1)	= (Mono a (Cos x 1) 1) * (derive x)
@@ -217,26 +221,27 @@ derive (Sec x 1) 			= (Mult (Tan x 1) (Sec x 1)) * (derive x)
 derive (Csc x 1) 			= (Mult (Cot x 1) (Mono (-1) (Csc x 1) 1)) * (derive x)
 derive (Cot x 1) 			= (Mono (-1) (Csc x 2) 1) * (derive x)
 derive (Poly l) 			= simpM $ Poly (map derive l)
-
+--}
+{--
 simpM :: Monomial -> Monomial
---simpM (Mono a (Mono b y o) n) = 
+--simpM (Mono a (Mono b y o) n) =
 simpM (Mono 1 x 1) = x
 simpM (Mult m1@(Mono a x n) m2@(Mono b y o)) =
 	if x == y then Mono (a*b) x (n+o) else Mult m1 m2
 simpM (Mult m1@(Mono a x 0) m2) = Mono a (simpM m2) 1
 simpM (Mult m1 m2@(Mono a x 0)) = Mono a (simpM m1) 1
-simpM (Mult m1 m2) = 
+simpM (Mult m1 m2) =
 	if toConstr m1 == toConstr m2 then (same m1) (term m1) (power m1 + power m2) else Mult m1 m2 where
 	
 simpM (Sum m1@(Mono a x n) m2@(Mono b y o)) =
 	if x == y && n == o then Mono (a+b) x n else Sum m1 m2
-simpM (Sum m1 m2) = 
+simpM (Sum m1 m2) =
 	if toConstr m1 == toConstr m2 && power m1 == power m2 && term m1 == term m2
-	then Mono 2 m1 1 
+	then Mono 2 m1 1
 	else Sum m1 m2
 simpM other = other
 
-
+--}
 {--
 data Polynomial = Poly [Monomial]
 				| Var Char
@@ -267,7 +272,7 @@ integrate :: Polynomial -> Polynomial
 integrate (Poly l) = Poly (map integ' l)
 
 integ' :: Monomial -> Monomial
-integ' (Mono a x (-1))	= Func (Ln a (Poly [Mono 1 x 1]) 1) 
+integ' (Mono a x (-1))	= Func (Ln a (Poly [Mono 1 x 1]) 1)
 integ' (Mono a x n)		= Mono (a/(n+1)) x (n+1)
 
 --S udv = uv - S duv
