@@ -1,25 +1,40 @@
-{-# LANGUAGE DeriveDataTypeable, StandaloneDeriving #-}
+{-# LANGUAGE DeriveDataTypeable #-}
+module Integral where
 
 import Data.Typeable
 import Data.Data
 
 
 
+a :: Fraction
 a = Frac 2 5
+b :: Fraction
 b = Frac 3 4
+c :: Fraction
 c = Frac (-2) 3
-
+d :: Monomial
 d = Mono 1 x 1
+e :: Monomial
 e = Mono 1 x 2
+f :: Monomial
 f = Mono (-2) x 3
+fcos :: Monomial
 fcos = Cos 1 x 1
+fsin :: Monomial
 fsin = Sin 1 x 1
+flippy :: Monomial
 flippy = derive (Mult fsin fsin)
+dfcos2 :: Monomial
 dfcos2 = derive (Mult fcos fcos)
+ff :: Monomial
 ff = Mono 3 x (Frac 1 3)
+g :: Monomial
 g = Poly [e,f,e]
+h :: Monomial
 h = Poly [ff]
+x :: Monomial
 x = Var 'x'
+y :: Monomial
 y = Var 'y'         
 
 --Return the string representation of a monomial's constructor
@@ -30,7 +45,9 @@ kind = show . toConstr
 same :: Monomial -> Fraction -> Monomial -> Fraction -> Monomial
 same = readF . kind
 
+lookM :: Monomial -> (String, Fraction, Monomial, Fraction)
 lookM x = (kind x, multiple x, term x, power x)
+lookS :: Monomial -> (String, Monomial, Monomial)
 lookS x = (kind x, first x, second x)
 
 data Fraction = Frac {num :: Integer, denom :: Integer}
@@ -47,7 +64,7 @@ instance Num Fraction where
     negate (Frac a b)                = Frac (-a) b
     abs (Frac a b)                   = Frac (abs a) (abs b)
     fromInteger x                    = Frac x 1
-    signum (Frac 0 b)                = 0
+    signum (Frac 0 _)                = 0
     signum (Frac a b)                = if signum a == signum b then 1  else (-1)
 
 instance Fractional Fraction where
@@ -93,7 +110,7 @@ instance Num Monomial where
         | m1 == m2 = Mono 2 (Mult a b) 1
         | otherwise = Sum m1 m2
     (+) a b                                
-        | a == b = Mono 2 ((same a) (term a) (power a)) 1
+        -- | a == b = Mono 2 ((same a) (term a) (power a)) 1
         | a == (-b) = 0
         | kind a == "Mono" && term a == b && power a == 1 = Mono (multiple a + 1) b 1 --a is a Mono containing several b
         | kind b == "Mono" && term b == a && power b == 1 = Mono (multiple b + 1) a 1 --b is a Mono containing several a
@@ -101,26 +118,25 @@ instance Num Monomial where
     (-) a b = a + (-b)
     (*) 1 b = b
     (*) a 1 = a
-    (*) 0 b = 0
-    (*) a 0 = 0
-    (*) x@(Var v) a = (Mono 1 x 1) * a
-    (*) a x@(Var v) = a * (Mono 1 x 1)
+    (*) 0 _ = 0
+    (*) _ 0 = 0
+    (*) x@(Var v) a = Mono 1 x 1 * a
+    (*) a x@(Var v) = a * Mono 1 x 1
     (*) m1@(Mono a x n) m2@(Mono b y o)
         | x == y || n == 0 || o == 0 = Mono (a*b) x (n+o)
         | otherwise = Mult m1 m2
-    (*) m1@(Mono a _ 0) b
-        | a == 0 = 0
-        | a == 1 = b
-        | otherwise = Mono a b 1
-    (*) a m1@(Mono b _ 0)
-        | b == 0 = 0
-        | b == 1 = a
-        | otherwise = Mono b a 1
+    (*) m1@(Mono a _ 0) (Exp b x) = Exp (a*b) x
+    (*) (Exp a x) m2@(Mono b _ 0) = Exp (a*b) x
+    --scalar * function (except exp)
+    (*) m1@(Mono a _ 0) b         = (same b) (a * multiple b) (term b) (power b) 
+    (*) a m1@(Mono b _ 0)         = (same a) (b * multiple a) (term a) (power a)
+        
     (*) m1@(Mult a b) m2@(Mult c d)
         | m1 == m2 = Mono 1 (Mult a b) 2
         | otherwise = Mult m1 m2
+    (*) (Exp a x) (Exp b y) = Exp (a*b) (x+y)
     (*) a b
-        | kind a == kind b && term a == term b = (same a) (term a) (power a + power b)
+        | kind a == kind b && term a == term b = (same a) (multiple a * multiple b) (term a) (power a + power b)
         | otherwise = Mult a b
     negate (Mono a x n) = Mono (-a) x n
     negate (Poly l)     = Poly (map negate l)
@@ -132,11 +148,11 @@ instance Num Monomial where
     signum _            = 1
 
 instance Eq Monomial where
-    Mono 0 x n == Mono 0 b y = True
+    Mono 0 _ _ == Mono 0 _ _ = True
     Mono a _ 0 == Mono b _ 0 = a == b
     Mono a x n == Mono b y o = a == b && x == y && n == o
-    Mono 0 x n == Sum a b    = a == 0 && b == 0
-    Sum a b == Mono 0 x n    = a == 0 && b == 0
+    Mono 0 _ _ == Sum a b    = a == 0 && b == 0
+    Sum a b == Mono 0 _ _    = a == 0 && b == 0
     Sum a b == Sum c d       = (a == c && b == d) || (a == d && b == c)
     Mult a b == Mult c d     = (a == c && b == d) || (a == d && b == c)
     Exp a x == Exp b y       = a == b && x == y
@@ -152,10 +168,10 @@ instance Eq Monomial where
 
 instance Show Monomial where
     show (Mono 0 _ _)        = show 0
-    show (Mono a x 0)        = show a
-    show (Mono a (Var x) n)  = show' a ++ id [x] ++ showPow n
+    show (Mono a _ 0)        = show a
+    show (Mono a (Var x) n)  = show' a ++ [x] ++ showPow n
     show (Mono a x n)        =        show' a ++ "(" ++ show x ++ ")" ++ showPow n
-    show (Var x)             = id [x]
+    show (Var x)             = [x]
     show (Mult x1 x2)        = "(" ++ show x1 ++ " * " ++ show x2 ++ ")"
     show (Sum x1 x2)         = "(" ++ show x1 ++ " + " ++ show x2 ++ ")"
     show (Poly (x:[]))       = show x
@@ -172,7 +188,7 @@ instance Show Monomial where
     show (Csc a x n)         = showFunc "csc" a x n
     show (Cot a x n)         = showFunc "cot" a x n
 
-readF :: [Char] -> Fraction -> Monomial -> Fraction -> Monomial
+readF :: String -> Fraction -> Monomial -> Fraction -> Monomial
 readF "Ln" = Ln
 readF "Sin" = Sin
 readF "Cos" = Cos
@@ -180,6 +196,7 @@ readF "Tan" = Tan
 readF "Sec" = Sec
 readF "Csc" = Csc
 readF "Cot" = Cot
+readF _ = Mono
 
 showFunc :: String -> Fraction -> Monomial -> Fraction -> String
 showFunc name a x n = show' a ++ name ++ showPow n ++ "(" ++ show x ++ ")"
@@ -187,21 +204,31 @@ show' :: Fraction -> String
 show' a = case a of
         (-1) -> "-"
         1 -> ""
-        a' -> (show . simplify) a
+        _ -> (show . simplify) a
 showPow :: Fraction -> String
 showPow n = case n of
         1 -> ""
-        n' -> "^" ++ (show . simplify) n
+        _ -> "^" ++ (show . simplify) n
 
 sign :: Monomial -> Fraction
 sign (Mono a _ _) = signum a
-sign _ = 1
+sign _            = 1
 
 
 derive :: Monomial -> Monomial
-derive (Var x)                                 = Mono 1 (Var x) 0
-derive (Mono a x 0)                 = Mono 0 x 0
-derive (Mono a (Var x) n)         = Mono (a*n) (Var x) (n-1)
+derive (Var x)                  = Mono 1 (Var x) 0
+derive (Mono _ x 0)             = Mono 0 x 0
+derive (Mono a (Var x) n)       = Mono (a*n) (Var x) (n-1)
+derive (Mono a x n)             = Mono (a*n) x (n-1) * derive x
+derive (Exp a x)                = Exp a x * derive x
+derive (Ln a x 1)               = Mono a x (-1) * derive x --not quite
+derive (Sin a x 1)              = Cos a x 1 * derive x
+derive (Cos a x 1)              = Sin (-a) x 1 * derive x
+derive (Tan a x 1)              = Sec a x 2 * derive x
+derive (Sec a x 1)              = Tan a x 1 * derive x * Sec 1 x 1
+derive (Csc a x 1)              = Cot (-a) x 1 * derive x * Csc 1 x 1
+derive (Cot a x 1)              = Csc (-a) x 2 * derive x
+derive (Poly l)                 = Poly (map derive l)
 {--
 derive (Mono a (Ln x 1) 1)        = (Mono a x (-1)) * (derive x) --not quite
 derive (Mono a (Cos x 1) 1)        = (Mono (-a) (Sin x 1) 1) * (derive x)

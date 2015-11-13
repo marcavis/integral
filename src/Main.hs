@@ -1,6 +1,8 @@
 module Main where
 
 
+import Integral
 
 main::IO()
-main = undefined
+main = do
+    putStrLn (show (derive x))
