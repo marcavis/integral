@@ -46,6 +46,7 @@ same :: Monomial -> Fraction -> Monomial -> Fraction -> Monomial
 same = readF . kind
 
 --Is the input any of the trigonometric functions?
+isTrig :: Monomial -> Bool
 isTrig a = elem (kind a) ["Sin", "Cos", "Tan", "Sec", "Csc", "Cot"]
 
 lookM :: Monomial -> (String, Fraction, Monomial, Fraction)
@@ -267,19 +268,19 @@ integrate :: Monomial -> Monomial
 integrate (Var x)                   = Mono (Frac 1 2) (Var x) 2
 integrate (Mono a (Var x) (-1))     = Ln a (Var x) 1
 integrate (Mono a x n)              = Mono (a/(n+1)) x (n+1)
-integrate (Ln a x 1)                = x * (Ln a x 1) - x
+integrate (Ln a (Var x) 1)          = Mono a (Var x) 1 * (Ln 1 (Var x) 1 - 1)
 integrate (Sin a (Var x) 1)         = Cos (-a) (Var x) 1
 integrate (Sin a t@(Mono b x 1) 1)  = Cos (-a/b) t 1
 integrate (Cos a (Var x) 1)         = Sin a (Var x) 1
 integrate (Cos a t@(Mono b x 1) 1)  = Sin (a/b) t 1
 integrate (Tan a (Var x) 1)         = Ln (-a) (Cos 1 (Var x) 1) 1
 integrate (Tan a t@(Mono b x 1) 1)  = Ln (-a/b) (Cos 1 t 1) 1
+integrate (Sec a (Var x) 1)         = Ln a (Tan 1 (Var x) 1 + Sec 1 (Var x) 1) 1
+integrate (Sec a t@(Mono b x 1) 1)  = Ln (a/b) (Tan 1 t 1 + Sec 1 t 1) 1
+integrate (Csc a (Var x) 1)         = Ln (-a) (Cot 1 (Var x) 1 + Csc 1 (Var x) 1) 1
+integrate (Csc a t@(Mono b x 1) 1)  = Ln (-a/b) (Cot 1 t 1 + Csc 1 t 1) 1
 integrate (Cot a (Var x) 1)         = Ln a (Sin 1 (Var x) 1) 1
 integrate (Cot a t@(Mono b x 1) 1)  = Ln (a/b) (Sin 1 t 1) 1
---integrate (Sin a (Var x) 1)         = Cos (-a) (Var x) 1
---integrate (Sin a t@(Mono b x 1) 1)  = Cos (-a/b) t 1
---integrate (Sin a (Var x) 1)         = Cos (-a) (Var x) 1
---integrate (Sin a t@(Mono b x 1) 1)  = Cos (-a/b) t 1
 integrate (Mult a b)                = a * integrate b - integrate (derive a * integrate b) --this works. wow.
 integrate (Sum a b)                 = integrate a + integrate b
 integrate (Poly l)                  = Poly (map integrate l)
