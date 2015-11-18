@@ -1,7 +1,7 @@
 {-# LANGUAGE DeriveDataTypeable #-}
 module Integral where
 
-
+import Prelude hiding (cos, sin, tan)
 import Data.Typeable
 import Data.Data
 
@@ -14,28 +14,33 @@ c :: Fraction
 c = Frac (-2) 3
 d :: Monomial
 d = Mono 1 x 1
-e :: Monomial
-e = Mono 1 x 2
 f :: Monomial
 f = Mono (-2) x 3
-fcos :: Monomial
-fcos = Cos 1 x 1
-fsin :: Monomial
-fsin = Sin 1 x 1
-flippy :: Monomial
-flippy = derive (Mult fsin fsin)
-dfcos2 :: Monomial
-dfcos2 = derive (Mult fcos fcos)
 ff :: Monomial
 ff = Mono 3 x (Frac 1 3)
-g :: Monomial
-g = Poly [e,f,e]
 h :: Monomial
 h = Poly [ff]
 x :: Monomial
 x = Var 'x'
 y :: Monomial
 y = Var 'y'         
+
+int = integrate
+der = derive
+
+--simpler constructors for the functions, assuming x as variable
+ln, sin, cos, tan, sec, csc, cot :: Monomial -> Monomial
+ln (Exp a x)    = toScalar a * x
+ln a            = Ln  1 a 1
+sin a           = Sin 1 a 1
+cos a           = Cos 1 a 1
+tan a           = Tan 1 a 1
+sec a           = Sec 1 a 1
+csc a           = Csc 1 a 1
+cot a           = Cot 1 a 1
+e :: Monomial -> Monomial
+e (Ln a x 1)    = toScalar a * x
+e a             = Exp 1 a
 
 --Return the string representation of a monomial's constructor
 kind :: Monomial -> String
@@ -90,6 +95,10 @@ signAdjust :: Fraction -> Fraction
 signAdjust (Frac 0 b) = Frac 0 b
 signAdjust (Frac a b) = if signum b == (-1) then Frac (-a) (-b) else Frac a b
 
+--turn a fraction a to a monomial ax^0
+toScalar :: Fraction -> Monomial
+toScalar a = Mono a x 0
+
 data Monomial         = 
     Mono {multiple :: Fraction, term :: Monomial, power :: Fraction}
     | Var {variable :: Char}
@@ -105,7 +114,6 @@ data Monomial         =
     | Csc {multiple :: Fraction, term :: Monomial, power :: Fraction}
     | Cot {multiple :: Fraction, term :: Monomial, power :: Fraction}
     deriving (Typeable, Data)
-        --deriving (Typeable, Data)
 
 instance Num Monomial where
     (+) 0 b = b
@@ -116,9 +124,11 @@ instance Num Monomial where
     (+) m1@(Mult a b) m2@(Mult c d)
         | m1 == m2 = Mono 2 (Mult a b) 1
         | otherwise = Sum m1 m2
+    (+) (Exp a x) (Exp b y) = if x == y then Exp (a+b) x else Sum (Exp a x) (Exp b y)
+    (+) (Ln a x n) (Ln b y o) = if x == y && n == o then Ln (a+b) x n else Sum (Ln a x n) (Ln b y o)
     (+) a b                                
-        -- | a == b = Mono 2 ((same a) (term a) (power a)) 1
         | a == (-b) = 0
+        | isTrig a && kind a == kind b && term a == term b && power a == power b = (same a) (multiple a + multiple b) (term a) (power a)
         | kind a == "Mono" && term a == b && power a == 1 = Mono (multiple a + 1) b 1 --a is a Mono containing several b
         | kind b == "Mono" && term b == a && power b == 1 = Mono (multiple b + 1) a 1 --b is a Mono containing several a
         | otherwise = Sum a b
@@ -149,6 +159,7 @@ instance Num Monomial where
     negate (Mono a x n) = Mono (-a) x n
     negate (Poly l)     = Poly (map negate l)
     negate (Sum a b)    = (-a) + (-b)
+    negate (Mult a b)   = (-a) * b
     negate a
         | kind a == "Exp"              = Exp (-multiple a) (term a)
         | kind a == "Ln"               = Ln (-multiple a) (term a) (power a)
@@ -157,8 +168,10 @@ instance Num Monomial where
     abs (Mono a x n)    = Mono (abs a) x n
     abs other           = other
     fromInteger x       = Mono (Frac x 1) (Var 'x') (Frac 0 1)
-    signum (Mono a _ _) = Mono (signum a) (Var 'x') (Frac 0 1)
-    signum _            = 1
+    signum Poly{}       = 1
+    signum Sum{}        = 1
+    signum Mult{}       = 1
+    signum a            = Mono (signum . multiple $ a) x 1
 
 --instance Fractional Monomial where
 --    (/) f g = Mono f g (-1)
@@ -246,7 +259,6 @@ sign :: Monomial -> Fraction
 sign (Mono a _ _) = signum a
 sign _            = 1
 
-
 derive :: Monomial -> Monomial
 derive (Var x)                  = Mono 1 (Var x) 0
 derive (Mono _ x 0)             = Mono 0 x 0
@@ -269,6 +281,9 @@ integrate (Var x)                   = Mono (Frac 1 2) (Var x) 2
 integrate (Mono a (Var x) (-1))     = Ln a (Var x) 1
 integrate (Mono a x n)              = Mono (a/(n+1)) x (n+1)
 integrate (Ln a (Var x) 1)          = Mono a (Var x) 1 * (Ln 1 (Var x) 1 - 1)
+integrate (Ln a t@(Mono b x n) 1)   = Mono a x 1 * (Ln 1 t 1 - (Mono n x 0))
+integrate (Exp a (Var x))           = Exp a (Var x)
+integrate (Exp a t@(Mono b x 1))    = Exp (a/b) t
 integrate (Sin a (Var x) 1)         = Cos (-a) (Var x) 1
 integrate (Sin a t@(Mono b x 1) 1)  = Cos (-a/b) t 1
 integrate (Cos a (Var x) 1)         = Sin a (Var x) 1
@@ -281,86 +296,9 @@ integrate (Csc a (Var x) 1)         = Ln (-a) (Cot 1 (Var x) 1 + Csc 1 (Var x) 1
 integrate (Csc a t@(Mono b x 1) 1)  = Ln (-a/b) (Cot 1 t 1 + Csc 1 t 1) 1
 integrate (Cot a (Var x) 1)         = Ln a (Sin 1 (Var x) 1) 1
 integrate (Cot a t@(Mono b x 1) 1)  = Ln (a/b) (Sin 1 t 1) 1
-integrate (Mult a b)                = a * integrate b - integrate (derive a * integrate b) --this works. wow.
+integrate (Mult a@Mono{} b@Mono{})  = integrate (a * b) --must have same variable
+integrate (Mult a b@Mono{})         = integrate (b*a) --integration by parts, below, expects the easier term on the left
+integrate (Mult a b)                = a * integrate b - integrate (derive a * integrate b) 
 integrate (Sum a b)                 = integrate a + integrate b
 integrate (Poly l)                  = Poly (map integrate l)
 
-{--
-simpM :: Monomial -> Monomial
---simpM (Mono a (Mono b y o) n) =
-simpM (Mono 1 x 1) = x
-simpM (Mult m1@(Mono a x n) m2@(Mono b y o)) =
-        if x == y then Mono (a*b) x (n+o) else Mult m1 m2
-simpM (Mult m1@(Mono a x 0) m2) = Mono a (simpM m2) 1
-simpM (Mult m1 m2@(Mono a x 0)) = Mono a (simpM m1) 1
-simpM (Mult m1 m2) =
-        if toConstr m1 == toConstr m2 then (same m1) (term m1) (power m1 + power m2) else Mult m1 m2 where
-        
-simpM (Sum m1@(Mono a x n) m2@(Mono b y o)) =
-        if x == y && n == o then Mono (a+b) x n else Sum m1 m2
-simpM (Sum m1 m2) =
-        if toConstr m1 == toConstr m2 && power m1 == power m2 && term m1 == term m2
-        then Mono 2 m1 1
-        else Sum m1 m2
-simpM other = other
-
---}
-{--
-data Polynomial = Poly [Monomial]
-                                | Var Char
-
-        deriving (Typeable, Data)
-
-instance Show Polynomial where
-        show (Var x) = id [x]
-        show (Poly (x:[])) = show x
-        show (Poly (x:xs)) = show x ++ " " ++ sign' sign'' ++ show (Poly xs) where
-                sign' "1" = "+"
-                sign' _ = ""
-                sign''  = (show . sign . head) xs
-
-derive :: Polynomial -> Polynomial
-derive (Poly l) = Poly (map deriv' l)
-
-deriv' :: Monomial -> Monomial
-deriv' (Mono a x 0) = Mono 0 x 0
-deriv' (Mono a x n) = Mono (a*n) x (n-1)
-deriv' (Func (Cos a x 1)) = Func (Sin (-a) x 1)
-deriv' (Func (Sin a x 1)) = Func (Cos a x 1)
-deriv' (Func (Tan a x 1)) = Func (Sec a x 2)
-deriv' (Func (Cot a x 1)) = Func (Csc (-a) x 2)
-deriv' (Mult a b) = Sum (Mult a (deriv' b)) (Mult (deriv' a) b)
-
-integrate :: Polynomial -> Polynomial
-integrate (Poly l) = Poly (map integ' l)
-
-integ' :: Monomial -> Monomial
-integ' (Mono a x (-1))        = Func (Ln a (Poly [Mono 1 x 1]) 1)
-integ' (Mono a x n)                = Mono (a/(n+1)) x (n+1)
-
---S udv = uv - S duv
-integByParts :: Monomial -> Polynomial
-integByParts (Mult a b) = Poly [Mult a (integ' b), Mult (deriv' a) (integ' b)]
---}
-
-{--
-derive (Mono a (Ln x 1) 1)        = (Mono a x (-1)) * (derive x) --not quite
-derive (Mono a (Cos x 1) 1)        = (Mono (-a) (Sin x 1) 1) * (derive x)
-derive (Mono a (Sin x 1) 1)        = (Mono a (Cos x 1) 1) * (derive x)
-derive (Mono a (Tan x 1) 1)        = (Mono a (Sec x 2) 1) * (derive x)
-derive (Mono a (Sec x 1) 1)        = (Mono a (Mult (Tan x 1) (Sec x 1)) 1) * (derive x)
-derive (Mono a (Csc x 1) 1)        = (Mono (-a) (Mult (Cot x 1) (Csc x 1)) 1) * (derive x)
-derive (Mono a (Cot x 1) 1)        = (Mono (-a) (Csc x 2) 1) * (derive x)
-derive (Mono a x n)                 = (Mono (a*n) x (n-1)) * (derive x)
-derive (Sum x1 x2)                         = (derive x1) + (derive x2)
-derive (Mult x1 x2)                        = (derive x1) * x2 + x1 * (derive x2)
-derive (Exp x)                                = (Exp x) * (derive x)
-derive (Ln x 1)                         = (Mono 1 x (-1)) * (derive x) --not quite
-derive (Cos x 1)                         = (Mono (-1) (Sin x 1) 1) * (derive x)
-derive (Sin x 1)                         = (Cos x 1) * (derive x)
-derive (Tan x 1)                         = (Sec x 2) * (derive x)
-derive (Sec x 1)                         = (Mult (Tan x 1) (Sec x 1)) * (derive x)
-derive (Csc x 1)                         = (Mult (Cot x 1) (Mono (-1) (Csc x 1) 1)) * (derive x)
-derive (Cot x 1)                         = (Mono (-1) (Csc x 2) 1) * (derive x)
-derive (Poly l)                         = simpM $ Poly (map derive l)
---}
